@@ -1,0 +1,15 @@
+{
+  "name": "github-health-check",
+  "version": "1.0.0",
+  "description": "GitHub 仓库体检工具",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "@anthropic-ai/sdk": "^0.26.0"
+  }
+}

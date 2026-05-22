@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub 仓库体检</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
+
+    /* ── Header ── */
+    .header { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; padding: 2.5rem 1rem 4rem; text-align: center; }
+    .header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 0.4rem; }
+    .header p { opacity: 0.85; font-size: 0.95rem; }
+
+    /* ── Container ── */
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 1rem 3rem; }
+
+    /* ── Input Card ── */
+    .input-card {
+      background: white;
+      border-radius: 16px;
+      padding: 1.75rem 2rem;
+      margin: -2.5rem auto 2rem;
+      max-width: 680px;
+      box-shadow: 0 8px 32px rgba(79, 70, 229, 0.15);
+    }
+    .input-row { display: flex; gap: 0.75rem; }
+    .input-row input {
+      flex: 1; padding: 0.75rem 1rem;
+      border: 2px solid #e2e8f0; border-radius: 10px;
+      font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+    }
+    .input-row input:focus { border-color: #6366f1; }
+    .input-row input::placeholder { color: #94a3b8; }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      background: #4f46e5; color: white;
+      border: none; border-radius: 10px;
+      font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn:hover { background: #4338ca; }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none; }
+    .input-hint { font-size: 0.78rem; color: #94a3b8; margin-top: 0.6rem; }
+    .input-hint a { color: #6366f1; cursor: pointer; text-decoration: none; }
+    .input-hint a:hover { text-decoration: underline; }
+
+    /* ── Loading ── */
+    #loading { text-align: center; padding: 4rem 0; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid #e2e8f0; border-top-color: #6366f1;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: #64748b; font-size: 0.9rem; }
+
+    /* ── Error ── */
+    #error {
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 12px; padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem; color: #dc2626; font-size: 0.9rem;
+    }
+
+    /* ── Generic Card ── */
+    .card {
+      background: white; border-radius: 16px;
+      padding: 1.5rem; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .card h3 { font-size: 0.9rem; font-weight: 600; color: #64748b; margin-bottom: 1rem; letter-spacing: 0.3px; }
+
+    /* ── Repo Info ── */
+    .repo-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+    .repo-avatar { width: 60px; height: 60px; border-radius: 12px; flex-shrink: 0; border: 2px solid #e2e8f0; }
+    .repo-title a { font-size: 1.25rem; font-weight: 700; color: #4f46e5; text-decoration: none; }
+    .repo-title a:hover { text-decoration: underline; }
+    .repo-desc { color: #64748b; margin-top: 0.3rem; font-size: 0.875rem; line-height: 1.5; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.75rem; font-size: 0.8rem; color: #94a3b8; }
+    .meta-item { display: flex; align-items: center; gap: 0.3rem; }
+    .topics { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
+    .topic { background: #ede9fe; color: #6d28d9; padding: 0.18rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 500; }
+
+    /* ── Stats Grid ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat-card {
+      background: white; border-radius: 14px; padding: 1.25rem 1rem;
+      text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      transition: transform 0.15s;
+    }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-icon { font-size: 1.4rem; margin-bottom: 0.4rem; }
+    .stat-value { font-size: 1.6rem; font-weight: 700; color: #1e293b; line-height: 1; }
+    .stat-label { font-size: 0.75rem; color: #94a3b8; margin-top: 0.3rem; }
+
+    /* ── Two-column layout ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+
+    /* ── Language Chart ── */
+    .lang-canvas-wrap { max-width: 180px; margin: 0 auto 1rem; }
+    .lang-legend { display: flex; flex-direction: column; gap: 0.45rem; }
+    .lang-item { display: flex; align-items: center; font-size: 0.82rem; gap: 0.5rem; }
+    .lang-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .lang-bar-bg { flex: 1; height: 5px; background: #f1f5f9; border-radius: 3px; }
+    .lang-bar { height: 100%; border-radius: 3px; }
+    .lang-name { width: 72px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lang-pct { color: #94a3b8; width: 38px; text-align: right; flex-shrink: 0; }
+
+    /* ── Commit Chart ── */
+    #commit-chart-wrap canvas { max-height: 200px; }
+
+    /* ── Contributors ── */
+    .contrib-list { display: flex; flex-direction: column; gap: 0.7rem; }
+    .contrib-item { display: flex; align-items: center; gap: 0.75rem; }
+    .contrib-rank { font-size: 0.75rem; color: #cbd5e1; width: 18px; text-align: right; flex-shrink: 0; }
+    .contrib-avatar { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #f1f5f9; }
+    .contrib-name { flex: 1; font-size: 0.875rem; font-weight: 500; color: #1e293b; text-decoration: none; }
+    .contrib-name:hover { color: #4f46e5; }
+    .contrib-bar-bg { width: 80px; height: 5px; background: #f1f5f9; border-radius: 3px; flex-shrink: 0; }
+    .contrib-bar { height: 100%; border-radius: 3px; background: #a5b4fc; }
+    .contrib-count { font-size: 0.78rem; color: #94a3b8; width: 60px; text-align: right; flex-shrink: 0; }
+
+    /* ── AI Score ── */
+    .score-top { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1rem; }
+    .score-circle {
+      width: 84px; height: 84px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      flex-shrink: 0; position: relative;
+    }
+    .score-number { font-size: 1.75rem; font-weight: 700; color: white; line-height: 1; }
+    .score-pts { font-size: 0.65rem; color: rgba(255,255,255,0.75); margin-top: 0.1rem; }
+    .score-right { flex: 1; }
+    .grade-badge {
+      display: inline-block; font-size: 1rem; font-weight: 700;
+      padding: 0.2rem 0.65rem; border-radius: 8px; margin-bottom: 0.4rem;
+    }
+    .score-summary { font-size: 0.82rem; color: #475569; line-height: 1.55; }
+    .dims { display: flex; flex-direction: column; gap: 0.55rem; margin: 0.75rem 0; }
+    .dim-row { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; }
+    .dim-name { width: 62px; color: #64748b; flex-shrink: 0; }
+    .dim-bar-bg { flex: 1; height: 7px; background: #f1f5f9; border-radius: 4px; }
+    .dim-bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+    .dim-val { width: 28px; text-align: right; font-weight: 600; color: #334155; font-size: 0.78rem; }
+    .tag-section { margin-top: 0.75rem; }
+    .tag-section-label { font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.35rem; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .tag { padding: 0.2rem 0.55rem; border-radius: 6px; font-size: 0.76rem; font-weight: 500; }
+    .tag-green { background: #dcfce7; color: #15803d; }
+    .tag-red { background: #fef2f2; color: #dc2626; }
+
+    .no-data { color: #94a3b8; font-size: 0.85rem; padding: 1rem 0; text-align: center; }
+
+    @media (max-width: 700px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .two-col { grid-template-columns: 1fr; }
+      .header h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔬 GitHub 仓库体检</h1>
+  <p>输入仓库地址，一键获取全方位健康报告</p>
+</div>
+
+<div class="container">
+
+  <!-- Input -->
+  <div class="input-card">
+    <div class="input-row">
+      <input id="url-input" type="text" placeholder="https://github.com/owner/repo" />
+      <button class="btn" id="analyze-btn" onclick="analyze()">开始分析</button>
+    </div>
+    <div class="input-hint">
+      试试：
+      <a onclick="setExample('https://github.com/facebook/react')">facebook/react</a> ·
+      <a onclick="setExample('https://github.com/vuejs/vue')">vuejs/vue</a> ·
+      <a onclick="setExample('https://github.com/torvalds/linux')">torvalds/linux</a>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="error" style="display:none"></div>
+
+  <!-- Loading -->
+  <div id="loading" style="display:none">
+    <div class="spinner"></div>
+    <p>正在并发拉取仓库数据，AI 评分中…</p>
+  </div>
+
+  <!-- Results -->
+  <div id="results" style="display:none">
+
+    <!-- Repo Info Card -->
+    <div class="card" style="margin-bottom:1.5rem">
+      <div class="repo-header">
+        <img id="r-avatar" class="repo-avatar" src="" alt="">
+        <div style="flex:1;min-width:0">
+          <div class="repo-title"><a id="r-name" href="#" target="_blank" rel="noopener"></a></div>
+          <div class="repo-desc" id="r-desc"></div>
+          <div class="meta-row">
+            <span class="meta-item">📅 创建 <span id="r-created"></span></span>
+            <span class="meta-item">⏱ 最近推送 <span id="r-pushed"></span></span>
+            <span class="meta-item">📜 <span id="r-license"></span></span>
+            <span class="meta-item">🚀 <span id="r-releases"></span> 个 Release</span>
+          </div>
+          <div class="topics" id="r-topics"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon">⭐</div><div class="stat-value" id="s-stars">-</div><div class="stat-label">Stars</div></div>
+      <div class="stat-card"><div class="stat-icon">🍴</div><div class="stat-value" id="s-forks">-</div><div class="stat-label">Forks</div></div>
+      <div class="stat-card"><div class="stat-icon">👁</div><div class="stat-value" id="s-watch">-</div><div class="stat-label">Watchers</div></div>
+      <div class="stat-card"><div class="stat-icon">🐛</div><div class="stat-value" id="s-issues">-</div><div class="stat-label">Open Issues</div></div>
+    </div>
+
+    <!-- Language + Commit -->
+    <div class="two-col">
+      <div class="card">
+        <h3>编程语言分布</h3>
+        <div class="lang-canvas-wrap"><canvas id="lang-chart"></canvas></div>
+        <div class="lang-legend" id="lang-legend"></div>
+      </div>
+      <div class="card" id="commit-chart-wrap">
+        <h3>近 12 周提交活动</h3>
+        <canvas id="commit-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Contributors + AI Score -->
+    <div class="two-col">
+      <div class="card">
+        <h3>Top 贡献者</h3>
+        <div class="contrib-list" id="contrib-list"></div>
+      </div>
+      <div class="card">
+        <h3>🤖 AI 综合评分</h3>
+        <div id="ai-content"></div>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+</div><!-- /container -->
+
+<script>
+const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f43f5e','#f97316','#eab308','#22c55e','#14b8a6','#06b6d4','#3b82f6','#a855f7','#64748b'];
+const GRADE_COLOR = { S:'#f59e0b', A:'#10b981', B:'#3b82f6', C:'#f97316', D:'#ef4444' };
+const DIM_LABEL  = { community:'社区活跃', activity:'维护活跃', documentation:'文档完整', maturity:'项目成熟' };
+
+let langChartInst = null, commitChartInst = null;
+
+function fmt(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+  return String(n);
+}
+
+function fmtDate(s) {
+  if (!s) return '-';
+  return new Date(s).toLocaleDateString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' });
+}
+
+function fmtWeek(ts) {
+  const d = new Date(ts * 1000);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function setExample(url) {
+  document.getElementById('url-input').value = url;
+}
+
+async function analyze() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { document.getElementById('url-input').focus(); return; }
+
+  const err    = document.getElementById('error');
+  const loading = document.getElementById('loading');
+  const results = document.getElementById('results');
+  const btn    = document.getElementById('analyze-btn');
+
+  err.style.display     = 'none';
+  results.style.display = 'none';
+  loading.style.display = 'block';
+  btn.disabled = true;
+  btn.textContent = '分析中…';
+
+  try {
+    const resp = await fetch(`/api/analyze?url=${encodeURIComponent(url)}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || '分析失败，请稍后重试');
+    renderAll(data);
+    results.style.display = 'block';
+  } catch (e) {
+    err.textContent = '❌ ' + e.message;
+    err.style.display = 'block';
+  } finally {
+    loading.style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = '开始分析';
+  }
+}
+
+function renderAll({ repo, languages, contributors, commit_activity, releases_count, ai_score }) {
+  // ── Repo Info ──
+  document.getElementById('r-avatar').src = repo.owner_avatar || '';
+  const nameEl = document.getElementById('r-name');
+  nameEl.textContent = repo.full_name;
+  nameEl.href = repo.html_url;
+  document.getElementById('r-desc').textContent = repo.description || '暂无描述';
+  document.getElementById('r-created').textContent = fmtDate(repo.created_at);
+  document.getElementById('r-pushed').textContent  = fmtDate(repo.pushed_at);
+  document.getElementById('r-license').textContent  = repo.license || '无 License';
+  document.getElementById('r-releases').textContent = releases_count;
+  document.getElementById('r-topics').innerHTML =
+    (repo.topics || []).map(t => `<span class="topic">${t}</span>`).join('');
+
+  // ── Stats ──
+  document.getElementById('s-stars').textContent  = fmt(repo.stars || 0);
+  document.getElementById('s-forks').textContent  = fmt(repo.forks || 0);
+  document.getElementById('s-watch').textContent  = fmt(repo.watchers || 0);
+  document.getElementById('s-issues').textContent = fmt(repo.open_issues || 0);
+
+  // ── Charts ──
+  renderLang(languages);
+  renderCommit(commit_activity);
+  renderContribs(contributors);
+  renderAI(ai_score);
+}
+
+// ── Language Doughnut ──
+function renderLang(langs) {
+  const entries = Object.entries(langs || {});
+  const legend  = document.getElementById('lang-legend');
+  if (!entries.length) { legend.innerHTML = '<p class="no-data">暂无语言数据</p>'; return; }
+
+  const total = entries.reduce((s,[,v]) => s+v, 0);
+  const pcts  = entries.map(([,v]) => ((v/total)*100).toFixed(1));
+
+  if (langChartInst) langChartInst.destroy();
+  langChartInst = new Chart(document.getElementById('lang-chart'), {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(([k])=>k),
+      datasets: [{
+        data: entries.map(([,v])=>v),
+        backgroundColor: COLORS.slice(0, entries.length),
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${pcts[ctx.dataIndex]}%` } }
+      }
+    }
+  });
+
+  legend.innerHTML = entries.map(([lang], i) => `
+    <div class="lang-item">
+      <span class="lang-dot" style="background:${COLORS[i]}"></span>
+      <span class="lang-name" title="${lang}">${lang}</span>
+      <div class="lang-bar-bg"><div class="lang-bar" style="width:${pcts[i]}%;background:${COLORS[i]}"></div></div>
+      <span class="lang-pct">${pcts[i]}%</span>
+    </div>`).join('');
+}
+
+// ── Commit Activity Bar ──
+function renderCommit(activity) {
+  const wrap = document.getElementById('commit-chart-wrap');
+  if (!activity || !activity.length) {
+    wrap.innerHTML += '<p class="no-data">暂无提交数据（GitHub 统计计算中）</p>';
+    return;
+  }
+  if (commitChartInst) commitChartInst.destroy();
+  commitChartInst = new Chart(document.getElementById('commit-chart'), {
+    type: 'bar',
+    data: {
+      labels: activity.map(w => fmtWeek(w.week)),
+      datasets: [{
+        label: '提交数',
+        data: activity.map(w => w.total),
+        backgroundColor: 'rgba(99,102,241,0.65)',
+        borderRadius: 5,
+        hoverBackgroundColor: 'rgba(99,102,241,0.9)'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, font: { size: 11 } } },
+        y: { grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ── Contributors ──
+function renderContribs(list) {
+  const el = document.getElementById('contrib-list');
+  if (!list || !list.length) { el.innerHTML = '<p class="no-data">暂无贡献者数据</p>'; return; }
+  const max = list[0].contributions;
+  el.innerHTML = list.map((c, i) => `
+    <div class="contrib-item">
+      <span class="contrib-rank">#${i+1}</span>
+      <img class="contrib-avatar" src="${c.avatar_url}" alt="${c.login}" loading="lazy">
+      <a class="contrib-name" href="${c.html_url}" target="_blank" rel="noopener">${c.login}</a>
+      <div class="contrib-bar-bg"><div class="contrib-bar" style="width:${(c.contributions/max*100).toFixed(0)}%"></div></div>
+      <span class="contrib-count">${fmt(c.contributions)} commits</span>
+    </div>`).join('');
+}
+
+// ── AI Score ──
+function renderAI(score) {
+  const el = document.getElementById('ai-content');
+  if (!score) {
+    el.innerHTML = `<p class="no-data">AI 评分不可用<br><small>请在启动时设置 <code>ANTHROPIC_API_KEY</code> 环境变量</small></p>`;
+    return;
+  }
+  const grade = score.grade || 'B';
+  const color = GRADE_COLOR[grade] || '#6366f1';
+  const dims  = score.dimensions || {};
+
+  el.innerHTML = `
+    <div class="score-top">
+      <div class="score-circle" style="background:${color}">
+        <div class="score-number">${score.score}</div>
+        <div class="score-pts">/ 100</div>
+      </div>
+      <div class="score-right">
+        <span class="grade-badge" style="background:${color}22;color:${color}">等级 ${grade}</span>
+        <div class="score-summary">${score.summary || ''}</div>
+      </div>
+    </div>
+
+    <div class="dims">
+      ${Object.entries(dims).map(([k,v]) => `
+        <div class="dim-row">
+          <span class="dim-name">${DIM_LABEL[k]||k}</span>
+          <div class="dim-bar-bg"><div class="dim-bar" style="width:${v}%;background:${color}"></div></div>
+          <span class="dim-val">${v}</span>
+        </div>`).join('')}
+    </div>
+
+    ${(score.highlights||[]).length ? `
+      <div class="tag-section">
+        <div class="tag-section-label">✅ 亮点</div>
+        <div class="tag-list">${score.highlights.map(h=>`<span class="tag tag-green">${h}</span>`).join('')}</div>
+      </div>` : ''}
+
+    ${(score.risks||[]).length ? `
+      <div class="tag-section">
+        <div class="tag-section-label">⚠️ 风险</div>
+        <div class="tag-list">${score.risks.map(r=>`<span class="tag tag-red">${r}</span>`).join('')}</div>
+      </div>` : ''}
+  `;
+}
+
+// Enter key support
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') analyze();
+});
+</script>
+</body>
+</html>
